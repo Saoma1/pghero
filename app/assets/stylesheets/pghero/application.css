@@ -2,6 +2,7 @@
  *= require ./nouislider
  *= require ./arduino-light
  *= require_self
+ *= require ./theme
  */
 
 html {

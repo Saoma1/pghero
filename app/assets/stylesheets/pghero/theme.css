@@ -1,0 +1,657 @@
+/*
+ * PgHero theme — pganalyze-inspired reskin.
+ *
+ * This stylesheet is purely visual. It restyles the existing markup/classes
+ * (.content, .table, .alert, #status, util classes) and adds a dark sidebar +
+ * light main-content shell. No data, routes, or JS behavior are changed.
+ *
+ * Loaded AFTER pghero/application.css so its rules win on equal specificity.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Design tokens
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --ph-sidebar-width: 240px;
+
+  --ph-sidebar-bg: #1f2430;
+  --ph-sidebar-bg-accent: #171b24;
+  --ph-sidebar-text: #b8c0cc;
+  --ph-sidebar-text-muted: #7d8797;
+  --ph-sidebar-active-bg: rgba(79, 156, 249, 0.14);
+  --ph-sidebar-active-text: #ffffff;
+  --ph-sidebar-border: rgba(255, 255, 255, 0.06);
+
+  --ph-page-bg: #f5f6f8;
+  --ph-card-bg: #ffffff;
+  --ph-card-border: #e7e9ee;
+  --ph-card-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+
+  --ph-text: #1f2937;
+  --ph-text-muted: #6b7280;
+  --ph-heading: #111827;
+
+  --ph-accent: #2563eb;
+  --ph-accent-hover: #1d4ed8;
+
+  --ph-border: #eef0f3;
+  --ph-table-head-bg: #f9fafb;
+  --ph-row-hover: #f5f7fa;
+
+  --ph-success: #16a34a;
+  --ph-warning: #d97706;
+  --ph-danger: #dc2626;
+  --ph-info: #2563eb;
+
+  --ph-radius: 8px;
+  --ph-radius-sm: 6px;
+
+  --ph-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ---------------------------------------------------------------------------
+ * Base
+ * ------------------------------------------------------------------------- */
+
+html {
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--ph-page-bg);
+  color: var(--ph-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a,
+a:visited,
+a:active {
+  color: var(--ph-accent);
+}
+
+a:hover {
+  color: var(--ph-accent-hover);
+}
+
+h1 {
+  font-size: 18px;
+  color: var(--ph-heading);
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 15px;
+  color: var(--ph-heading);
+}
+
+h1 small {
+  color: var(--ph-text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * App shell: sidebar + main
+ * ------------------------------------------------------------------------- */
+
+.ph-layout {
+  min-height: 100vh;
+}
+
+.ph-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--ph-sidebar-width);
+  background-color: var(--ph-sidebar-bg);
+  color: var(--ph-sidebar-text);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid var(--ph-sidebar-border);
+  z-index: 20;
+}
+
+.ph-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--ph-sidebar-border);
+}
+
+.ph-brand a,
+.ph-brand a:visited {
+  color: #fff;
+  text-decoration: none;
+}
+
+.ph-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ph-radius-sm);
+  background: linear-gradient(135deg, #4f9cf9, #2563eb);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ph-sidebar-section {
+  padding: 14px 12px 6px;
+}
+
+.ph-sidebar-heading {
+  padding: 8px 12px 6px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ph-sidebar-text-muted);
+}
+
+/* Sidebar nav — overrides the shared .nav rules from application.css */
+.ph-sidebar .ph-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 12px;
+}
+
+.ph-sidebar .ph-nav li {
+  margin: 1px 0;
+}
+
+.ph-sidebar .ph-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--ph-radius-sm);
+  color: var(--ph-sidebar-text);
+  font-size: 13.5px;
+  text-decoration: none;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.ph-sidebar .ph-nav a:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.ph-sidebar .ph-nav li.active > a {
+  background-color: var(--ph-sidebar-active-bg);
+  color: var(--ph-sidebar-active-text);
+  box-shadow: inset 2px 0 0 var(--ph-accent);
+}
+
+.ph-sidebar .ph-nav li.active-database > a {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.ph-nav-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
+}
+
+.ph-nav li.active > a .ph-nav-icon {
+  opacity: 1;
+  color: #4f9cf9;
+}
+
+.ph-nav-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Main column offset to clear the fixed sidebar */
+.ph-main {
+  margin-left: var(--ph-sidebar-width);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------------------
+ * Top bar
+ * ------------------------------------------------------------------------- */
+
+.ph-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 28px;
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(6px);
+  border-bottom: 1px solid var(--ph-card-border);
+}
+
+.ph-topbar-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ph-heading);
+  letter-spacing: -0.01em;
+}
+
+.ph-topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Placeholder dropdowns in the top bar (non-functional for now). */
+.ph-control {
+  position: relative;
+}
+
+.ph-control-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 7px 30px 7px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ph-text);
+  background-color: #fff;
+  border: 1px solid var(--ph-card-border);
+  border-radius: var(--ph-radius-sm);
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.ph-control-select:focus {
+  outline: none;
+  border-color: var(--ph-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* caret */
+.ph-control::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  width: 7px;
+  height: 7px;
+  margin-top: -5px;
+  border-right: 1.5px solid var(--ph-text-muted);
+  border-bottom: 1.5px solid var(--ph-text-muted);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.ph-control-placeholder .ph-control-select {
+  color: var(--ph-text-muted);
+  background-color: #fbfbfc;
+  cursor: not-allowed;
+}
+
+.ph-content {
+  flex: 1 1 auto;
+  padding: 24px 28px 40px;
+  max-width: 1200px;
+  width: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+ * Cards (existing .content boxes)
+ * ------------------------------------------------------------------------- */
+
+.content {
+  background-color: var(--ph-card-bg);
+  border: 1px solid var(--ph-card-border);
+  border-radius: var(--ph-radius);
+  box-shadow: var(--ph-card-shadow);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.content > h1:first-child,
+.content > h2:first-child {
+  margin-top: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Overview layout: main content on the left, status panel on the right
+ * ------------------------------------------------------------------------- */
+
+.ph-index {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.ph-index-main {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Status summary (#status) — vertical stack of severity cards on a gray panel */
+#status {
+  order: 2;
+  flex: 0 0 300px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  background-color: #eceef2;
+  border: 1px solid var(--ph-card-border);
+  border-radius: var(--ph-radius);
+  position: sticky;
+  top: 76px;
+}
+
+#status .alert {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Alerts / banners (also reused as status cards)
+ * ------------------------------------------------------------------------- */
+
+.alert {
+  padding: 12px 14px;
+  border: 1px solid var(--ph-card-border);
+  border-left-width: 3px;
+  border-radius: var(--ph-radius-sm);
+  background-color: #fff;
+  color: var(--ph-text);
+  box-shadow: var(--ph-card-shadow);
+  font-size: 13px;
+}
+
+.alert a,
+.alert a:visited {
+  color: var(--ph-accent);
+  text-decoration: none;
+}
+
+.alert-info {
+  border-left-color: var(--ph-info);
+}
+
+.alert-success {
+  border-left-color: var(--ph-success);
+}
+
+.alert-warning {
+  border-left-color: var(--ph-warning);
+}
+
+.alert-danger {
+  border-left-color: var(--ph-danger);
+}
+
+/* The .tiny / .user counters become subtle badges inside status cards */
+.alert .tiny {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ph-text-muted);
+  background-color: var(--ph-page-bg);
+  border-radius: 999px;
+}
+
+/* Top notice banner (first .alert in the content area) */
+.ph-content > .alert:first-child {
+  background-color: #eff4ff;
+  border-color: #d6e2ff;
+  border-left-color: var(--ph-info);
+}
+
+/* ---------------------------------------------------------------------------
+ * Tables
+ * ------------------------------------------------------------------------- */
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+table th {
+  border-bottom: 1px solid var(--ph-border);
+  padding: 10px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ph-text-muted);
+  background-color: var(--ph-table-head-bg);
+}
+
+table th:first-child {
+  border-top-left-radius: var(--ph-radius-sm);
+}
+
+table th:last-child {
+  border-top-right-radius: var(--ph-radius-sm);
+}
+
+table td {
+  border-top: 1px solid var(--ph-border);
+  padding: 9px 10px;
+  vertical-align: top;
+}
+
+/* Row hover — only on real data rows, not the full-width query/detail rows */
+.table tbody tr:hover td {
+  background-color: var(--ph-row-hover);
+}
+
+.table tbody tr:hover td.query-row {
+  background-color: transparent;
+}
+
+/* Duplicate Indexes: no row hover, and a more prominent header */
+.duplicate-indexes tbody tr:hover td {
+  background-color: transparent;
+}
+
+.duplicate-indexes thead th {
+  color: var(--ph-heading);
+  background-color: transparent;
+  font-weight: 700;
+  border-bottom: 1px solid #d7dbe2;
+}
+
+.queries-table th a,
+.space-table th a {
+  color: inherit;
+}
+
+/* Right-align numeric metric columns in the primary data tables */
+.queries-table td,
+.queries-table th {
+  text-align: right;
+}
+
+.queries-table td:first-child,
+.queries-table th:first-child {
+  text-align: left;
+}
+
+.queries-table td.query-row {
+  text-align: left;
+}
+
+.space-table th:nth-child(n + 2),
+.space-table td:nth-child(n + 2) {
+  text-align: right;
+}
+
+/* Monospace SQL, truncated with ellipsis; full text available on hover/title */
+.query-code,
+.query-pre code,
+pre code.query-code {
+  font-family: var(--ph-mono);
+}
+
+pre {
+  background-color: #f6f8fa;
+  border: 1px solid var(--ph-border);
+  border-radius: var(--ph-radius-sm);
+  font-family: var(--ph-mono);
+  font-size: 12.5px;
+}
+
+.query-row pre {
+  margin-bottom: 12px;
+}
+
+/* Impact/severity accent bar on query rows */
+.queries-table tbody tr.query-row-primary {
+  position: relative;
+}
+
+/* Muted text + counters */
+.text-muted {
+  color: var(--ph-text-muted);
+}
+
+.percent,
+.tiny,
+.user {
+  color: var(--ph-text-muted);
+}
+
+.unused-index,
+.primary-key {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ph-warning);
+  background-color: rgba(217, 119, 6, 0.1);
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------------------------------------------------------------------------
+ * Buttons
+ * ------------------------------------------------------------------------- */
+
+.btn {
+  border-radius: var(--ph-radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn-info {
+  background-color: var(--ph-accent);
+}
+
+.btn-info:hover {
+  background-color: var(--ph-accent-hover);
+}
+
+.btn-danger {
+  background-color: var(--ph-danger);
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+}
+
+/* ---------------------------------------------------------------------------
+ * Forms
+ * ------------------------------------------------------------------------- */
+
+textarea {
+  border: 1px solid var(--ph-card-border);
+  border-radius: var(--ph-radius-sm);
+  font-family: var(--ph-mono);
+  font-size: 13px;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--ph-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* ---------------------------------------------------------------------------
+ * Responsive: stack the sidebar above the content on narrow screens
+ * ------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .ph-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    flex-direction: column;
+    border-right: none;
+    border-bottom: 1px solid var(--ph-sidebar-border);
+  }
+
+  .ph-sidebar .ph-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 10px 12px;
+  }
+
+  .ph-sidebar .ph-nav li {
+    margin: 0;
+  }
+
+  .ph-sidebar .ph-nav li.active > a {
+    box-shadow: inset 0 -2px 0 var(--ph-accent);
+  }
+
+  .ph-main {
+    margin-left: 0;
+  }
+
+  .ph-topbar {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
+  .ph-content {
+    padding: 16px 16px 32px;
+  }
+
+  .ph-index {
+    flex-direction: column;
+  }
+
+  #status {
+    order: -1;
+    width: 100%;
+    flex-basis: auto;
+    position: static;
+  }
+}

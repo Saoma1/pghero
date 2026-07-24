@@ -1,3 +1,4 @@
+<div class="ph-index">
 <div id="status">
   <% if @replica %>
     <div class="alert alert-<%= @good_replication_lag ? "success" : "warning" %>">
@@ -118,6 +119,7 @@
   <% end %>
 </div>
 
+<div class="ph-index-main">
 <% if params[:unreadable] && @unreadable_sequences.any? %>
   <div class="content">
     <h1>Unreadable Sequences</h1>
@@ -391,8 +393,11 @@
     <div class="migration">
       <pre>rails generate migration remove_unneeded_indexes</pre>
       <p>And paste</p>
-      <pre><% @duplicate_indexes.each do |query| %>
-<%= pghero_remove_index(query[:unneeded_index]) %><% end %></pre>
+      <pre>
+        <% @duplicate_indexes.each do |query| %>
+          <%= pghero_remove_index(query[:unneeded_index]) %>
+        <% end %>
+      </pre>
     </div>
 
     <table class="table duplicate-indexes">
@@ -517,6 +522,8 @@ pg_stat_statements.track = all</pre>
     </table>
   </div>
 <% end %>
+</div><!-- /.ph-index-main -->
+</div><!-- /.ph-index -->
 
 <%= javascript_tag nonce: true do %>
   highlightQueries();
