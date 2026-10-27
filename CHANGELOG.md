@@ -1,3 +1,32 @@
+## 4.1.0 (2026-10-20)
+
+- Restricted killing queries to current database and certain backend types - [more info](https://github.com/ankane/pghero/security/advisories/GHSA-5287-hmjh-qmqq)
+- Added grouping for parallel queries
+- Fixed error when index is dropped during indexes query
+- Fixed `<unable to filter data>` messages
+- Removed replication backends from live queries page
+
+## 4.0.1 (2026-08-15)
+
+- Added sequences from identity columns
+
+## 4.0.0 (2026-08-05)
+
+See the upgrade notes for [Docker](guides/Docker.md#upgrading) or [Rails](guides/Rails.md#upgrading)
+
+- Reduced space for historical query stats
+- Added `disable_kill` option to disable killing queries and connections
+- Added `unused_index_megabytes` option to set minimum size for unused indexes
+- Added copy button to explain visualize page
+- Fixed error with unlogged sequences on replicas
+- Dropped support for Postgres < 14
+- Dropped support for pg_query < 6
+- Dropped support for Sprockets < 4
+- Dropped support for google-cloud-monitoring < 1
+- Dropped support for system stats for Azure Database (Ruby SDK no longer supported)
+- Dropped support for Ruby API
+- Dropped support for Linux packages
+
 ## 3.8.0 (2026-04-15)
 
 - Updated tune page for latest PgTune

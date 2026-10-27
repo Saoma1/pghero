@@ -2,7 +2,7 @@ module PgHero
   module Methods
     module SuggestedIndexes
       def suggested_indexes_enabled?
-        defined?(PgQuery) && Gem::Version.new(PgQuery::VERSION) >= Gem::Version.new("2") && query_stats_enabled?
+        defined?(PgQuery) && Gem::Version.new(PgQuery::VERSION) >= Gem::Version.new("6") && query_stats_enabled?
       end
 
       # TODO clean this mess
@@ -102,9 +102,9 @@ module PgHero
         end
 
         # get stats about columns for relevant tables
-        tables = parts.values.map { |t| t[:table] }.uniq
+        tables = parts.values.filter_map { |t| t[:table] }.uniq
         # TODO get schema from query structure, then try search path
-        schema = PgHero.connection_config(connection_model)[:schema] || "public"
+        schema = connection_model.connection_db_config.configuration_hash[:schema] || "public"
         if tables.any?
           row_stats = table_stats(table: tables, schema: schema).to_h { |i| [i[:table], i[:estimated_rows]] }
           col_stats = column_stats(table: tables, schema: schema).group_by { |i| i[:table] }
@@ -198,6 +198,7 @@ module PgHero
       def best_index_structure(statement)
         return {error: "Empty statement"} if statement.to_s.empty?
         return {error: "Too large"} if statement.to_s.length > 10000
+        return {error: "Insufficient privilege"} if statement == "<insufficient privilege>"
 
         begin
           tree = PgQuery.parse(statement).tree
@@ -287,33 +288,29 @@ module PgHero
           if tree.bool_expr.boolop == :AND_EXPR
             tree.bool_expr.args.flat_map { |v| parse_where(v) }
           else
-            raise "Not Implemented"
+            raise Error, "Not Implemented"
           end
-        elsif aexpr && ["=", "<>", ">", ">=", "<", "<=", "~~", "~~*", "BETWEEN"].include?(aexpr.name.first.string.send(str_method))
-          [{column: aexpr.lexpr.column_ref.fields.last.string.send(str_method), op: aexpr.name.first.string.send(str_method)}]
+        elsif aexpr && ["=", "<>", ">", ">=", "<", "<=", "~~", "~~*", "BETWEEN"].include?(aexpr.name.first.string.sval)
+          [{column: aexpr.lexpr.column_ref.fields.last.string.sval, op: aexpr.name.first.string.sval}]
         elsif tree.null_test
           op = tree.null_test.nulltesttype == :IS_NOT_NULL ? "not_null" : "null"
-          [{column: tree.null_test.arg.column_ref.fields.last.string.send(str_method), op: op}]
+          [{column: tree.null_test.arg.column_ref.fields.last.string.sval, op: op}]
         else
-          raise "Not Implemented"
+          raise Error, "Not Implemented"
         end
-      end
-
-      def str_method
-        @str_method ||= Gem::Version.new(PgQuery::VERSION) >= Gem::Version.new("4") ? :sval : :str
       end
 
       def parse_sort(sort_clause)
         sort_clause.map do |v|
           {
-            column: v.sort_by.node.column_ref.fields.last.string.send(str_method),
+            column: v.sort_by.node.column_ref.fields.last.string.sval,
             direction: v.sort_by.sortby_dir == :SORTBY_DESC ? "desc" : "asc"
           }
         end
       end
 
       def column_stats(schema: nil, table: nil)
-        select_all <<~SQL
+        sql = <<~SQL
           SELECT
             schemaname AS schema,
             tablename AS table,
@@ -323,11 +320,14 @@ module PgHero
           FROM
             pg_stats
           WHERE
-            schemaname = #{quote(schema)}
-            #{table ? "AND tablename IN (#{Array(table).map { |t| quote(t) }.join(", ")})" : ""}
+            schemaname = :schema
+            #{"AND tablename IN (:table)" if table}
           ORDER BY
             1, 2, 3
         SQL
+        binds = {schema: schema}
+        binds[:table] = Array(table) if table
+        select_all(sql, binds)
       end
     end
   end

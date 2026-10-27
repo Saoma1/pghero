@@ -2,41 +2,30 @@ require_relative "test_helper"
 
 class QueriesTest < Minitest::Test
   def test_running_queries
-    assert database.running_queries
+    with_running_query("SELECT pg_sleep(1)") do
+      assert_equal "SELECT pg_sleep(1)", database.running_queries.first[:query]
+    end
   end
 
-  def test_filter_data
-    query = "SELECT pg_sleep(1)"
-    # TODO manually checkout connection if needed
-    t = Thread.new { ActiveRecord::Base.connection.execute(query) }
-    sleep(0.5)
-
-    assert_equal query, database.running_queries.first[:query]
-
+  def test_running_queries_filter_data
     with_filter_data do
-      assert_equal "SELECT pg_sleep($1)", database.running_queries.first[:query]
+      with_running_query("SELECT pg_sleep(1)") do
+        assert_equal "SELECT pg_sleep($1)", database.running_queries.first[:query]
+      end
     end
-
-    t.join
   end
 
   def test_long_running_queries
-    assert database.long_running_queries
+    assert_empty database.long_running_queries
+
+    with_config({"long_running_query_sec" => 0}) do
+      with_running_query("SELECT pg_sleep(1)") do
+        assert_equal "SELECT pg_sleep(1)", database.long_running_queries.first[:query]
+      end
+    end
   end
 
   def test_blocked_queries
-    assert database.blocked_queries
-  end
-
-  def with_filter_data
-    previous_value = PgHero.filter_data
-    begin
-      PgHero.filter_data = true
-      database.remove_instance_variable(:@filter_data)
-      yield
-    ensure
-      PgHero.filter_data = previous_value
-      database.remove_instance_variable(:@filter_data)
-    end
+    assert_empty database.blocked_queries
   end
 end

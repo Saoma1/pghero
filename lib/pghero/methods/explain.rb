@@ -1,26 +1,8 @@
 module PgHero
   module Methods
     module Explain
-      # TODO remove in 4.0
       # note: this method is not affected by the explain option
-      def explain(sql)
-        sql = squish(sql)
-        explanation = nil
-
-        # use transaction for safety
-        with_transaction(statement_timeout: (explain_timeout_sec * 1000).round, rollback: true) do
-          if (sql.delete_suffix(";").include?(";") || sql.upcase.include?("COMMIT")) && !explain_safe?
-            raise ActiveRecord::StatementInvalid, "Unsafe statement"
-          end
-          explanation = execute("EXPLAIN #{sql}").map { |v| v["QUERY PLAN"] }.join("\n")
-        end
-
-        explanation
-      end
-
-      # TODO rename to explain in 4.0
-      # note: this method is not affected by the explain option
-      def explain_v2(sql, analyze: nil, verbose: nil, costs: nil, settings: nil, generic_plan: nil, buffers: nil, wal: nil, timing: nil, summary: nil, format: "text")
+      def explain(sql, analyze: nil, verbose: nil, costs: nil, settings: nil, generic_plan: nil, buffers: nil, wal: nil, timing: nil, summary: nil, format: "text")
         options = []
         add_explain_option(options, "ANALYZE", analyze)
         add_explain_option(options, "VERBOSE", verbose)
@@ -33,7 +15,18 @@ module PgHero
         add_explain_option(options, "SUMMARY", summary)
         options << "FORMAT #{explain_format(format)}"
 
-        explain("(#{options.join(", ")}) #{sql}")
+        sql = "(#{options.join(", ")}) #{sql}"
+        explanation = nil
+
+        # use transaction for safety
+        with_transaction(statement_timeout: (explain_timeout_sec * 1000).round, rollback: true) do
+          if (sql.delete_suffix(";").include?(";") || sql.upcase.include?("COMMIT")) && !explain_safe?
+            raise ActiveRecord::StatementInvalid, "Unsafe statement"
+          end
+          explanation = execute("EXPLAIN #{sql}").map { |v| v["QUERY PLAN"] }.join("\n")
+        end
+
+        explanation
       end
 
       private

@@ -1,27 +1,52 @@
 module PgHero
   module Methods
     module Kill
-      def kill(pid)
-        select_one("SELECT pg_terminate_backend(#{pid.to_i})")
+      # note: this method is not affected by disable_kill option
+      def kill(pid, key: nil)
+        kill_backends(pid: pid.to_i, key: key, backend_type: ["client backend", "autovacuum worker"]).any? { |v| v[:pg_terminate_backend] }
       end
 
+      # note: this method is not affected by disable_kill option
       def kill_long_running_queries(min_duration: nil)
-        running_queries(min_duration: min_duration || long_running_query_sec).each { |query| kill(query[:pid]) }
+        kill_backends(min_duration: min_duration || long_running_query_sec)
         true
       end
 
+      # note: this method is not affected by disable_kill option
       def kill_all
-        select_all <<~SQL
+        kill_backends
+        true
+      end
+
+      private
+
+      def kill_backends(pid: nil, key: nil, min_duration: nil, backend_type: ["client backend"])
+        select_expr = "pg_terminate_backend(pid)"
+        # key is used to reduce chance of killing different query
+        # check *after* row matches other conditions
+        if key
+          select_expr = "CASE WHEN EXTRACT(MICROSECONDS FROM COALESCE(query_start, xact_start)) % 1000000 = :key THEN #{select_expr} ELSE NULL END AS pg_terminate_backend"
+        end
+        query = <<~SQL
           SELECT
-            pg_terminate_backend(pid)
+            #{select_expr}
           FROM
             pg_stat_activity
           WHERE
             pid <> pg_backend_pid()
             AND query <> '<insufficient privilege>'
             AND datname = current_database()
+            AND backend_type IN (:backend_type)
+            #{"AND pid = :pid" if pid}
+            #{"AND state <> 'idle' AND NOW() - COALESCE(query_start, xact_start) > interval :min_duration" if min_duration}
         SQL
-        true
+
+        binds = {}
+        binds[:backend_type] = Array(backend_type)
+        binds[:pid] = pid.to_i if pid
+        binds[:key] = key.to_i if key
+        binds[:min_duration] = "#{min_duration.to_i} seconds" if min_duration
+        select_all(query, binds)
       end
     end
   end

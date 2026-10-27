@@ -10,8 +10,6 @@ Add the following to your `postgresql.conf`:
 
 ```conf
 shared_preload_libraries = 'pg_stat_statements'
-pg_stat_statements.track = all
-pg_stat_statements.max = 10000
 track_activity_query_size = 2048
 ```
 
@@ -53,7 +51,11 @@ SELECT pg_stat_statements_reset();
 
 #### Queries show up as `<insufficient privilege>`
 
-For security reasons, only superusers can see queries executed by other users.
+Add the `pg_read_all_stats` role to the database user.
+
+```psql
+GRANT pg_read_all_stats TO <user>;
+```
 
 #### ERROR: column "total_plan_time" / "queryid" does not exist
 

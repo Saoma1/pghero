@@ -6,18 +6,19 @@ A performance dashboard for Postgres
 
 [![Screenshot](https://pghero.dokkuapp.com/assets/pghero-88a0d052.png)](https://pghero.dokkuapp.com/)
 
+**PgHero 4.0 was recently released** - see how to upgrade [Docker](guides/Docker.md#upgrading) or [Rails](guides/Rails.md#upgrading)
+
 :tangerine: Battle-tested at [Instacart](https://www.instacart.com/opensource)
 
 [![Build Status](https://github.com/ankane/pghero/actions/workflows/build.yml/badge.svg)](https://github.com/ankane/pghero/actions)
 
 ## Documentation
 
-PgHero is available as a Docker image, Linux package, and Rails engine.
+PgHero is available as a Docker image and Rails engine.
 
 Select your preferred method of installation to get started.
 
 - [Docker](guides/Docker.md)
-- [Linux](guides/Linux.md)
 - [Rails](guides/Rails.md)
 
 ## Related Projects
