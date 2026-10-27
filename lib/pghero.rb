@@ -1,9 +1,6 @@
 # dependencies
 require "active_support"
 
-# stdlib
-require "forwardable"
-
 # methods
 require_relative "pghero/methods/basic"
 require_relative "pghero/methods/connections"
@@ -21,7 +18,6 @@ require_relative "pghero/methods/space"
 require_relative "pghero/methods/suggested_indexes"
 require_relative "pghero/methods/system"
 require_relative "pghero/methods/tables"
-require_relative "pghero/methods/users"
 
 require_relative "pghero/database"
 require_relative "pghero/engine" if defined?(Rails)
@@ -30,6 +26,7 @@ require_relative "pghero/version"
 module PgHero
   autoload :Connection, "pghero/connection"
   autoload :Stats, "pghero/stats"
+  autoload :Query, "pghero/query"
   autoload :QueryStats, "pghero/query_stats"
   autoload :SpaceStats, "pghero/space_stats"
 
@@ -54,20 +51,6 @@ module PgHero
   self.filter_data = ENV["PGHERO_FILTER_DATA"].to_s.size > 0
 
   class << self
-    extend Forwardable
-    def_delegators :primary_database, :aws_access_key_id, :analyze, :analyze_tables, :autoindex, :autovacuum_danger,
-      :best_index, :blocked_queries, :connections, :connection_sources, :connection_states, :connection_stats,
-      :cpu_usage, :create_user, :database_size, :aws_db_instance_identifier, :disable_query_stats, :drop_user,
-      :duplicate_indexes, :enable_query_stats, :explain, :historical_query_stats_enabled?, :index_caching,
-      :index_hit_rate, :index_usage, :indexes, :invalid_constraints, :invalid_indexes, :kill, :kill_all, :kill_long_running_queries,
-      :last_stats_reset_time, :long_running_queries, :maintenance_info, :missing_indexes, :query_stats,
-      :query_stats_available?, :query_stats_enabled?, :query_stats_extension_enabled?, :query_stats_readable?,
-      :rds_stats, :read_iops_stats, :aws_region, :relation_sizes, :replica?, :replication_lag, :replication_lag_stats,
-      :reset_query_stats, :reset_stats, :running_queries, :aws_secret_access_key, :sequence_danger, :sequences, :settings,
-      :slow_queries, :space_growth, :ssl_used?, :suggested_indexes, :suggested_indexes_by_query,
-      :suggested_indexes_enabled?, :system_stats_enabled?, :table_caching, :table_hit_rate, :table_stats,
-      :total_connections, :transaction_id_danger, :unused_indexes, :unused_tables, :write_iops_stats
-
     def time_zone=(time_zone)
       @time_zone = time_zone.is_a?(ActiveSupport::TimeZone) ? time_zone : ActiveSupport::TimeZone[time_zone.to_s]
     end
@@ -100,11 +83,15 @@ module PgHero
 
     # private
     def explain_mode
-      @config["explain"]
+      config["explain"]
     end
 
     def visualize_url
       @visualize_url ||= config["visualize_url"] || ENV["PGHERO_VISUALIZE_URL"] || "https://tatiyants.com/pev/#/plans/new"
+    end
+
+    def kill_enabled?
+      !config["disable_kill"]
     end
 
     def config
@@ -130,7 +117,7 @@ module PgHero
           elsif config["databases"] # preferred format
             config
           elsif config_file_exists
-            raise "Invalid config file"
+            raise Error, "Invalid config file"
           else
             nil
           end
@@ -144,8 +131,8 @@ module PgHero
       databases = {}
 
       unless ENV["PGHERO_DATABASE_URL"]
-        ActiveRecord::Base.configurations.configs_for(env_name: env, include_replicas_key => true).each do |db|
-          databases[db.send(spec_name_key)] = {"spec" => db.send(spec_name_key)}
+        ActiveRecord::Base.configurations.configs_for(env_name: env, include_hidden: true).each do |db|
+          databases[db.name] = {"spec" => db.name}
         end
       end
 
@@ -158,8 +145,7 @@ module PgHero
       if databases.size == 1
         databases.values.first.merge!(
           "aws_db_instance_identifier" => ENV["PGHERO_DB_INSTANCE_IDENTIFIER"],
-          "gcp_database_id" => ENV["PGHERO_GCP_DATABASE_ID"],
-          "azure_resource_id" => ENV["PGHERO_AZURE_RESOURCE_ID"]
+          "gcp_database_id" => ENV["PGHERO_GCP_DATABASE_ID"]
         )
       end
 
@@ -177,15 +163,11 @@ module PgHero
           # return if another process initialized while we were waiting
           return @databases if defined?(@databases)
 
-          @databases = config["databases"].map { |id, c| [id.to_sym, Database.new(id, c)] }.to_h
+          @databases = config["databases"].to_h { |id, c| [id.to_sym, Database.new(id, c)] }
         end
       end
 
       @databases
-    end
-
-    def primary_database
-      databases.values.first
     end
 
     def capture_query_stats(verbose: false)
@@ -224,6 +206,7 @@ module PgHero
     # delete previous stats
     # go database by database to use an index
     # stats for old databases are not cleaned up since we can't use an index
+    # TODO clean queries
     def clean_query_stats(before: nil)
       each_database do |database|
         database.clean_query_stats(before: before)
@@ -234,21 +217,6 @@ module PgHero
       each_database do |database|
         database.clean_space_stats(before: before)
       end
-    end
-
-    # private
-    def connection_config(model)
-      model.connection_db_config.configuration_hash
-    end
-
-    # private
-    def spec_name_key
-      :name
-    end
-
-    # private
-    def include_replicas_key
-      :include_hidden
     end
 
     private

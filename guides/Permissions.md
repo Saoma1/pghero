@@ -1,68 +1,68 @@
 # Permissions
 
-For security, Postgres doesn’t allow you to see queries from other users without being a superuser. However, you likely don’t want to run PgHero as a superuser. You can use `SECURITY DEFINER` to give non-superusers access to superuser functions.
+We recommend setting up a dedicated user for PgHero. With a superuser, run:
 
-With a superuser, run:
+```sql
+CREATE ROLE pghero WITH LOGIN ENCRYPTED PASSWORD 'secret';
+GRANT CONNECT ON DATABASE <dbname> TO pghero;
+ALTER ROLE pghero SET lock_timeout = '1s';
+ALTER ROLE pghero SET statement_timeout = '10s';
+
+-- view queries
+GRANT pg_read_all_stats TO pghero;
+
+-- kill queries
+GRANT pg_signal_backend TO pghero;
+
+-- reset query stats
+GRANT EXECUTE ON FUNCTION pg_stat_statements_reset TO pghero;
+
+-- read sequences
+GRANT USAGE ON SCHEMA public TO pghero;
+GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO pghero;
+ALTER DEFAULT PRIVILEGES FOR ROLE <migrations-user> IN SCHEMA public GRANT SELECT ON SEQUENCES TO pghero;
+```
+
+For suggested indexes, run:
 
 ```sql
 CREATE SCHEMA pghero;
 
--- view queries
-CREATE OR REPLACE FUNCTION pghero.pg_stat_activity() RETURNS SETOF pg_stat_activity AS
-$$
-  SELECT * FROM pg_catalog.pg_stat_activity;
-$$ LANGUAGE sql VOLATILE SECURITY DEFINER;
-
-CREATE VIEW pghero.pg_stat_activity AS SELECT * FROM pghero.pg_stat_activity();
-
--- kill queries
-CREATE OR REPLACE FUNCTION pghero.pg_terminate_backend(pid int) RETURNS boolean AS
-$$
-  SELECT * FROM pg_catalog.pg_terminate_backend(pid);
-$$ LANGUAGE sql VOLATILE SECURITY DEFINER;
-
--- query stats
-CREATE OR REPLACE FUNCTION pghero.pg_stat_statements() RETURNS SETOF pg_stat_statements AS
-$$
-  SELECT * FROM public.pg_stat_statements;
-$$ LANGUAGE sql VOLATILE SECURITY DEFINER;
-
-CREATE VIEW pghero.pg_stat_statements AS SELECT * FROM pghero.pg_stat_statements();
-
--- query stats reset
-CREATE OR REPLACE FUNCTION pghero.pg_stat_statements_reset() RETURNS void AS
-$$
-  SELECT public.pg_stat_statements_reset();
-$$ LANGUAGE sql VOLATILE SECURITY DEFINER;
-
--- improved query stats reset for Postgres 12+ - delete for earlier versions
-CREATE OR REPLACE FUNCTION pghero.pg_stat_statements_reset(userid oid, dbid oid, queryid bigint) RETURNS void AS
-$$
-  SELECT public.pg_stat_statements_reset(userid, dbid, queryid);
-$$ LANGUAGE sql VOLATILE SECURITY DEFINER;
-
--- suggested indexes
 CREATE OR REPLACE FUNCTION pghero.pg_stats() RETURNS
 TABLE(schemaname name, tablename name, attname name, null_frac real, avg_width integer, n_distinct real) AS
 $$
-  SELECT schemaname, tablename, attname, null_frac, avg_width, n_distinct FROM pg_catalog.pg_stats;
+    SELECT schemaname, tablename, attname, null_frac, avg_width, n_distinct FROM pg_catalog.pg_stats;
 $$ LANGUAGE sql VOLATILE SECURITY DEFINER;
 
 CREATE VIEW pghero.pg_stats AS SELECT * FROM pghero.pg_stats();
 
--- create user
-CREATE ROLE pghero WITH LOGIN ENCRYPTED PASSWORD 'secret';
-GRANT CONNECT ON DATABASE <dbname> TO pghero;
-ALTER ROLE pghero SET search_path = pghero, pg_catalog, public;
-ALTER ROLE pghero SET lock_timeout = '1s';
 GRANT USAGE ON SCHEMA pghero TO pghero;
 GRANT SELECT ON ALL TABLES IN SCHEMA pghero TO pghero;
+ALTER ROLE pghero SET search_path = pghero, pg_catalog, public;
+```
 
--- grant permissions for current sequences
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO pghero;
+For `EXPLAIN`, run:
 
--- grant permissions for future sequences
-ALTER DEFAULT PRIVILEGES FOR ROLE <migrations-user> IN SCHEMA public GRANT SELECT ON SEQUENCES TO pghero;
+```sql
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO pghero;
+ALTER DEFAULT PRIVILEGES FOR ROLE <migrations-user> IN SCHEMA public GRANT SELECT ON TABLES TO pghero;
+```
+
+## Upgrading
+
+We recommend switching from `SECURITY DEFINER` functions to [predefined roles](https://www.postgresql.org/docs/current/predefined-roles.html) where possible.
+
+```sql
+GRANT pg_read_all_stats TO pghero;
+GRANT pg_signal_backend TO pghero;
+GRANT EXECUTE ON FUNCTION pg_stat_statements_reset TO pghero;
+
+DROP VIEW IF EXISTS pghero.pg_stat_activity;
+DROP VIEW IF EXISTS pghero.pg_stat_statements;
+DROP FUNCTION IF EXISTS pghero.pg_stat_activity;
+DROP FUNCTION IF EXISTS pghero.pg_stat_statements;
+DROP FUNCTION IF EXISTS pghero.pg_stat_statements_reset;
+DROP FUNCTION IF EXISTS pghero.pg_terminate_backend;
 ```
 
 ## Thanks

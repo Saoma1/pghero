@@ -5,28 +5,39 @@ module PgHero
         query = <<~SQL
           SELECT
             pid,
+            leader_pid,
             state,
             application_name AS source,
             age(NOW(), COALESCE(query_start, xact_start)) AS duration,
-            #{server_version_num >= 90600 ? "(wait_event IS NOT NULL) AS waiting" : "waiting"},
+            wait_event IS NOT NULL AS waiting,
             query,
             COALESCE(query_start, xact_start) AS started_at,
             EXTRACT(EPOCH FROM NOW() - COALESCE(query_start, xact_start)) * 1000.0 AS duration_ms,
             usename AS user,
-            #{server_version_num >= 100000 ? "backend_type" : "NULL AS backend_type"}
+            backend_type
           FROM
             pg_stat_activity
           WHERE
             state <> 'idle'
             AND pid <> pg_backend_pid()
             AND datname = current_database()
-            #{min_duration ? "AND NOW() - COALESCE(query_start, xact_start) > interval '#{min_duration.to_i} seconds'" : nil}
-            #{all ? nil : "AND query <> '<insufficient privilege>'"}
+            AND backend_type IN ('client backend', 'parallel worker', 'autovacuum worker')
+            #{"AND NOW() - COALESCE(query_start, xact_start) > interval :min_duration" if min_duration}
+            #{"AND query <> '<insufficient privilege>'" if !all}
           ORDER BY
             COALESCE(query_start, xact_start) DESC
         SQL
 
-        select_all(query, query_columns: [:query])
+        binds = {}
+        binds[:min_duration] = "#{min_duration.to_i} seconds" if min_duration
+        queries = select_all(query, binds, query_columns: [:query])
+        groups = queries.group_by { |v| v[:leader_pid] || v[:pid] }
+        groups.map do |pid, queries|
+          leader = queries.find { |v| v[:leader_pid].nil? } || queries.first
+          leader.delete(:leader_pid)
+          leader[:worker_pids] = queries.filter_map { |v| v[:pid] if v.key?(:leader_pid) }
+          leader
+        end
       end
 
       def long_running_queries
@@ -65,10 +76,10 @@ module PgHero
             NOT blockedl.granted
             AND blockeda.query <> '<insufficient privilege>'
             AND blockeda.datname = current_database()
+            AND blockeda.backend_type IN ('client backend', 'parallel worker', 'autovacuum worker')
           ORDER BY
             blocked_duration DESC
         SQL
-
         select_all(query, query_columns: [:blocked_query, :current_or_recent_query_in_blocking_process])
       end
     end

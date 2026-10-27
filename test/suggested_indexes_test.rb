@@ -2,11 +2,8 @@ require_relative "test_helper"
 
 class SuggestedIndexesTest < Minitest::Test
   def setup
-    if database.server_version_num >= 120000
-      database.reset_query_stats
-    else
-      database.reset_instance_query_stats
-    end
+    super
+    database.reset_query_stats
   end
 
   def test_suggested_indexes_enabled
@@ -68,13 +65,17 @@ class SuggestedIndexesTest < Minitest::Test
   def test_inet
     query = "SELECT * FROM users WHERE last_known_ip = '127.0.0.1'"
     result = database.suggested_indexes_by_query(queries: [query])[query]
-    assert_equal ["last_known_ip inet_ops"], result[:covering_index]
+    # inet_ops is the default in Postgres 19+
+    expected = database.server_version_num >= 190000 ? ["last_known_ip"] : ["last_known_ip inet_ops"]
+    assert_equal expected, result[:covering_index]
   end
 
   def test_inet_greater_than
     query = "SELECT * FROM users WHERE last_known_ip > '127.0.0.1'"
     result = database.suggested_indexes_by_query(queries: [query])[query]
-    assert_equal ["last_known_ip inet_ops"], result[:covering_index]
+    # inet_ops is the default in Postgres 19+
+    expected = database.server_version_num >= 190000 ? ["last_known_ip"] : ["last_known_ip inet_ops"]
+    assert_equal expected, result[:covering_index]
   end
 
   def test_brin

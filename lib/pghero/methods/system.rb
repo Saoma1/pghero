@@ -10,8 +10,6 @@ module PgHero
           :aws
         elsif gcp_database_id
           :gcp
-        elsif azure_resource_id
-          :azure
         end
       end
 
@@ -77,54 +75,6 @@ module PgHero
         end
       end
 
-      def azure_stats(metric_name, duration: nil, period: nil, offset: nil, series: false)
-        # TODO DRY with RDS stats
-        duration = (duration || 1.hour).to_i
-        period = (period || 1.minute).to_i
-        offset = (offset || 0).to_i
-        end_time = Time.at(((Time.now - offset).to_f / period).ceil * period)
-        start_time = end_time - duration
-
-        interval =
-          case period
-          when 60
-            "PT1M"
-          when 300
-            "PT5M"
-          when 900
-            "PT15M"
-          when 1800
-            "PT30M"
-          when 3600
-            "PT1H"
-          else
-            raise Error, "Unsupported period"
-          end
-
-        client = Azure::Monitor::Profiles::Latest::Mgmt::Client.new
-        # call utc to convert +00:00 to Z
-        timespan = "#{start_time.utc.iso8601}/#{end_time.utc.iso8601}"
-        results = client.metrics.list(
-          azure_resource_id,
-          metricnames: metric_name,
-          aggregation: "Average",
-          timespan: timespan,
-          interval: interval
-        )
-
-        data = {}
-        result = results.value.first
-        if result
-          result.timeseries.first.data.each do |point|
-            data[point.time_stamp.to_time] = point.average
-          end
-        end
-
-        add_missing_data(data, start_time, end_time, period) if series
-
-        data
-      end
-
       private
 
       def gcp_stats(metric_name, duration: nil, period: nil, offset: nil, series: false)
@@ -139,25 +89,19 @@ module PgHero
         raise Error, "Invalid metric name" unless /\A[a-z\/_]+\z/i.match?(metric_name)
         raise Error, "Invalid database id" unless /\A[a-z0-9\-:]+\z/i.match?(gcp_database_id)
 
-        # we handle four situations:
+        # we handle three situations:
         # 1. google-cloud-monitoring-v3
-        # 2. google-cloud-monitoring >= 1
-        # 3. google-cloud-monitoring < 1
-        # 4. google-apis-monitoring_v3
+        # 2. google-cloud-monitoring
+        # 3. google-apis-monitoring_v3
         begin
           require "google/cloud/monitoring/v3"
         rescue LoadError
-          begin
-            require "google/cloud/monitoring"
-          rescue LoadError
-            require "google/apis/monitoring_v3"
-          end
+          require "google/apis/monitoring_v3"
         end
 
         # for situations 1 and 2
-        # Google::Cloud::Monitoring.metric_service is documented
-        # but doesn't work for situation 1
-        if defined?(Google::Cloud::Monitoring::V3::MetricService::Client)
+        # Google::Cloud::Monitoring.metric_service doesn't work for situation 1
+        if defined?(Google::Cloud::Monitoring::V3)
           client = Google::Cloud::Monitoring::V3::MetricService::Client.new
 
           interval = Google::Cloud::Monitoring::V3::TimeInterval.new
@@ -178,29 +122,6 @@ module PgHero
             view: Google::Cloud::Monitoring::V3::ListTimeSeriesRequest::TimeSeriesView::FULL,
             aggregation: aggregation
           })
-        elsif defined?(Google::Cloud::Monitoring)
-          require "google/cloud/monitoring"
-
-          client = Google::Cloud::Monitoring::Metric.new
-
-          interval = Google::Monitoring::V3::TimeInterval.new
-          interval.end_time = Google::Protobuf::Timestamp.new(seconds: end_time.to_i)
-          # subtract period to make sure we get first data point
-          interval.start_time = Google::Protobuf::Timestamp.new(seconds: (start_time - period).to_i)
-
-          aggregation = Google::Monitoring::V3::Aggregation.new
-          # may be better to use ALIGN_NEXT_OLDER for space stats to show most recent data point
-          # stick with average for now to match AWS
-          aggregation.per_series_aligner = Google::Monitoring::V3::Aggregation::Aligner::ALIGN_MEAN
-          aggregation.alignment_period = period
-
-          results = client.list_time_series(
-            "projects/#{gcp_database_id.split(":").first}",
-            "metric.type = \"cloudsql.googleapis.com/database/#{metric_name}\" AND resource.label.database_id = \"#{gcp_database_id}\"",
-            interval,
-            Google::Monitoring::V3::ListTimeSeriesRequest::TimeSeriesView::FULL,
-            aggregation: aggregation
-          )
         else
           client = Google::Apis::MonitoringV3::MonitoringService.new
 
@@ -264,30 +185,9 @@ module PgHero
             }
             gcp_stats(metrics[metric_key], **options)
           end
-        when :azure
-          if metric_key == :free_space
-            quota = azure_stats("storage_limit", **options)
-            used = azure_stats("storage_used", **options)
-            free_space(quota, used)
-          else
-            replication_lag_stat = azure_flexible_server? ? "physical_replication_delay_in_seconds" : "pg_replica_log_delay_in_seconds"
-            metrics = {
-              cpu: "cpu_percent",
-              connections: "active_connections",
-              replication_lag: replication_lag_stat,
-              read_iops: "read_iops", # flexible server only
-              write_iops: "write_iops" # flexible server only
-            }
-            raise Error, "Metric not supported" unless metrics[metric_key]
-            azure_stats(metrics[metric_key], **options)
-          end
         else
           raise NotEnabled, "System stats not enabled"
         end
-      end
-
-      def azure_flexible_server?
-        azure_resource_id.include?("/Microsoft.DBforPostgreSQL/flexibleServers/")
       end
 
       # only use data points included in both series

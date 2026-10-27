@@ -3,6 +3,19 @@ require_relative "test_helper"
 class QueryStatsTest < Minitest::Test
   def test_query_stats
     assert database.query_stats
+    assert database.query_stats(sort: "average_time")
+    assert database.query_stats(sort: "calls")
+
+    error = assert_raises(ArgumentError) do
+      database.query_stats(sort: "invalid")
+    end
+    assert_equal "Invalid sort", error.message
+  end
+
+  def test_query_stats_historical
+    assert database.query_stats(historical: true)
+    assert database.query_stats(historical: true, sort: "average_time")
+    assert database.query_stats(historical: true, sort: "calls")
   end
 
   def test_query_stats_available
@@ -27,40 +40,10 @@ class QueryStatsTest < Minitest::Test
   end
 
   def test_reset_query_stats
-    skip unless gte12?
-
     assert database.reset_query_stats
-  end
-
-  def test_reset_instance_query_stats
-    assert database.reset_instance_query_stats
-  end
-
-  def test_reset_instance_query_stats_database
-    skip unless gte12?
-
-    assert database.reset_query_stats
-    ActiveRecord::Base.connection.select_all("SELECT 1")
-    assert database.query_stats.any? { |qs| qs[:query] == "SELECT $1" }
-
-    assert database.reset_instance_query_stats(database: database.database_name)
-
-    assert_equal 1, database.query_stats.size
-    refute database.query_stats.any? { |qs| qs[:query] == "SELECT $1" }
-  end
-
-  def test_reset_instance_query_stats_database_invalid
-    skip unless gte12?
-
-    error = assert_raises(PgHero::Error) do
-      database.reset_instance_query_stats(database: "pghero_test2")
-    end
-    assert_equal "Database not found: pghero_test2", error.message
   end
 
   def test_reset_query_stats_user
-    skip unless gte12?
-
     assert database.reset_query_stats
     ActiveRecord::Base.connection.select_all("SELECT 1")
     assert database.query_stats.any? { |qs| qs[:query] == "SELECT $1" }
@@ -72,8 +55,6 @@ class QueryStatsTest < Minitest::Test
   end
 
   def test_reset_query_stats_user_invalid
-    skip unless gte12?
-
     error = assert_raises(PgHero::Error) do
       database.reset_query_stats(user: "postgres2")
     end
@@ -81,8 +62,6 @@ class QueryStatsTest < Minitest::Test
   end
 
   def test_reset_query_stats_query_hash
-    skip unless gte12?
-
     assert database.reset_query_stats
     ActiveRecord::Base.connection.select_all("SELECT 1")
     ActiveRecord::Base.connection.select_all("SELECT 1 + 1")
@@ -98,8 +77,6 @@ class QueryStatsTest < Minitest::Test
   end
 
   def test_reset_query_stats_query_hash_invalid
-    skip unless gte12?
-
     error = assert_raises(PgHero::Error) do
       database.reset_query_stats(query_hash: 0)
     end
@@ -112,10 +89,19 @@ class QueryStatsTest < Minitest::Test
 
   def test_capture_query_stats
     PgHero::QueryStats.delete_all
+
     refute PgHero::QueryStats.any?
+    database.reset_query_stats
+    ActiveRecord::Base.connection.select_all("SELECT 1")
     assert database.capture_query_stats
     assert PgHero::QueryStats.any?
-    assert database.query_stats(historical: true)
+    qs = PgHero::Query.find_by!(query: "SELECT $1").query_stats.last
+    assert_equal "primary", qs.database
+    assert_equal 1, qs.calls
+    refute_empty database.query_stats(current: false, historical: true)
+    ActiveRecord::Base.connection.select_all("SELECT 2")
+    qs = database.query_stats(historical: true).find { |v| v[:query] == "SELECT $1" }
+    assert_equal 2, qs[:calls]
   end
 
   def test_clean_query_stats
@@ -126,7 +112,30 @@ class QueryStatsTest < Minitest::Test
     assert database.slow_queries
   end
 
-  def gte12?
-    database.server_version_num >= 120000
+  def test_query_hash_stats
+    PgHero::QueryStats.delete_all
+
+    database.reset_query_stats
+    ActiveRecord::Base.connection.select_all("SELECT 1 /*hello*/")
+    database.capture_query_stats
+    qs = PgHero::Query.find_by!(query: "SELECT $1 /*hello*/").query_stats.last
+    ActiveRecord::Base.connection.select_all("SELECT 1 /*world*/")
+    assert_equal 2, database.query_hash_stats(qs.query_hash).size
+    assert database.query_hash_stats(qs.query_hash).map { |v| v[:captured_at] }.all? { |v| v.instance_of?(Time) }
+    assert_equal 1, database.query_hash_stats(qs.query_hash, current: false).size
+    assert_equal ["hello", "world"], database.query_hash_stats(qs.query_hash).map { |v| v[:origin] }.sort
+  end
+
+  def test_filter_data
+    PgHero::QueryStats.delete_all
+
+    database.reset_query_stats
+    ActiveRecord::Base.connection.select_all("SELECT 1")
+    assert database.capture_query_stats
+    ActiveRecord::Base.connection.select_all("SELECT 1")
+    with_filter_data do
+      qs = database.query_stats(historical: true).find { |v| v[:query] == "SELECT $1" }
+      assert_equal 2, qs[:calls]
+    end
   end
 end

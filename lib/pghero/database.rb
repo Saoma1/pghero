@@ -16,7 +16,6 @@ module PgHero
     include Methods::SuggestedIndexes
     include Methods::System
     include Methods::Tables
-    include Methods::Users
 
     attr_reader :id, :config
 
@@ -62,9 +61,12 @@ module PgHero
       (config["long_running_query_sec"] || PgHero.config["long_running_query_sec"] || PgHero.long_running_query_sec).to_i
     end
 
-    # defaults to 100 megabytes
+    def unused_index_bytes
+      ((config["unused_index_megabytes"] || PgHero.config["unused_index_megabytes"] || 10).to_f * 1.megabyte).to_i
+    end
+
     def index_bloat_bytes
-      (config["index_bloat_bytes"] || PgHero.config["index_bloat_bytes"] || 104857600).to_i
+      (config["index_bloat_bytes"] || PgHero.config["index_bloat_bytes"] || 100.megabytes).to_i
     end
 
     def aws_access_key_id
@@ -89,11 +91,6 @@ module PgHero
       @gcp_database_id ||= config["gcp_database_id"]
     end
 
-    # environment variable is only used if no config file
-    def azure_resource_id
-      @azure_resource_id ||= config["azure_resource_id"]
-    end
-
     # must check keys for booleans
     def filter_data
       unless defined?(@filter_data)
@@ -101,7 +98,7 @@ module PgHero
           if config.key?("filter_data")
             config["filter_data"]
           elsif PgHero.config.key?("filter_data")
-            PgHero.config.key?("filter_data")
+            PgHero.config["filter_data"]
           else
             PgHero.filter_data
           end
@@ -142,7 +139,7 @@ module PgHero
 
       # resolve spec
       if !url && config["spec"]
-        config_options = {env_name: PgHero.env, PgHero.spec_name_key => config["spec"], PgHero.include_replicas_key => true}
+        config_options = {env_name: PgHero.env, name: config["spec"], include_hidden: true}
         resolved = ActiveRecord::Base.configurations.configs_for(**config_options)
         raise Error, "Spec not found: #{config["spec"]}" unless resolved
         url = resolved.configuration_hash
