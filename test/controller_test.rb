@@ -6,6 +6,28 @@ class ControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_match "No long running queries", response.body
     refute_match "hit rate", response.body
+    assert_select 'meta[name="viewport"][content="width=device-width, initial-scale=1"]', count: 1
+    assert_select ".ph-layout > .ph-sidebar .ph-nav-icon"
+    assert_select ".ph-layout > .ph-main > .ph-topbar", count: 1
+    assert_select ".ph-main > .ph-content > .ph-index", count: 1 do
+      assert_select "> #status", count: 1
+      assert_select "> .ph-index-main", count: 1 do
+        assert_select "#status", count: 0
+        assert_select ".content"
+      end
+    end
+    assert_select 'script[src*="jquery"]', count: 0
+  end
+
+  def test_index_duplicate_index_migration
+    get pg_hero.root_path
+    assert_response :success
+    assert_select ".ph-index-main .content", text: /Duplicate Indexes/ do
+      assert_select ".migration pre > code", count: 2
+      assert_select ".migration pre:last-child > code", count: 1 do |elements|
+        assert_equal 'remove_index :users, name: "index_users_on_id", column: :id', elements.first.text
+      end
+    end
   end
 
   def test_index_extended
@@ -23,6 +45,7 @@ class ControllerTest < ActionDispatch::IntegrationTest
         assert_match "1 long running query", response.body
         assert_match "Kill</button>", response.body
         assert_match "Kill All</button>", response.body
+        assert_select "button.btn.btn-danger.push-right", text: "Kill All", count: 1
       end
     end
   end
